@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FX & 金利 相関ダッシュボード</title>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h1 { text-align: center; color: #1a1a1a; margin-bottom: 30px; }
+        #chart { width: 100%; height: 650px; }
+        .status { text-align: right; font-size: 12px; color: #666; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>金融市場 相関チャート</h1>
+    <div id="chart">データを読み込み中...</div>
+    <div class="status" id="last-update"></div>
+</div>
+
+<script>
+    // --- Supabase設定 ---
+    const SUPABASE_URL = "https://あなたのURL.supabase.co";
+    const SUPABASE_KEY = "あなたのANON_KEY";
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function fetchData() {
+        // 直近3日分のデータを取得
+        const { data, error } = await _supabase
+            .from('market_data')
+            .select('label, value, created_at')
+            .order('created_at', { ascending: true })
+            .limit(1000); 
+
+        if (error) {
+            document.getElementById('chart').innerText = "エラー: " + error.message;
+            return;
+        }
+
+        const traces = {};
+        data.forEach(row => {
+            if (!traces[row.label]) {
+                traces[row.label] = {
+                    x: [], y: [], 
+                    name: row.label, 
+                    type: 'scatter', 
+                    mode: 'lines',
+                    line: { width: 2 }
+                };
+            }
+            traces[row.label].x.push(new Date(row.created_at));
+            traces[row.label].y.push(row.value);
+        });
+
+        // US10Y(米10年債)などは右軸に設定すると見やすくなります
+        if (traces['US10Y']) traces['US10Y'].yaxis = 'y2';
+        if (traces['JP10Y']) traces['JP10Y'].yaxis = 'y2';
+
+        const layout = {
+            plot_bgcolor: '#fff',
+            paper_bgcolor: '#fff',
+            xaxis: { title: '時刻', gridcolor: '#eee' },
+            yaxis: { title: '為替レート', gridcolor: '#eee' },
+            yaxis2: { 
+                title: '金利 (%)', 
+                overlaying: 'y', 
+                side: 'right', 
+                showgrid: false 
+            },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 30, b: 80, l: 60, r: 60 }
+        };
+
+        Plotly.newPlot('chart', Object.values(traces), layout);
+        document.getElementById('last-update').innerText = "最終更新: " + new Date().toLocaleString();
+    }
+
+    fetchData();
+    setInterval(fetchData, 60000 * 5); // 5分ごとに自動更新
+</script>
+</body>
+</html>
