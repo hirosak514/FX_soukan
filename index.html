@@ -2,17 +2,15 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>金融市場 相関ダッシュボード</title>
     <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-        h1 { text-align: center; color: #1a1a1a; margin-bottom: 20px; font-size: 24px; }
+        h1 { text-align: center; color: #1a1a1a; margin-bottom: 5px; }
         #chart { width: 100%; height: 650px; }
-        .status { text-align: right; font-size: 12px; color: #666; margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px; }
-        .info { font-size: 13px; color: #444; margin-bottom: 10px; background: #eef2f7; padding: 10px; border-radius: 6px; }
+        .info { background: #e9ecef; padding: 10px; border-radius: 5px; font-size: 13px; margin-bottom: 20px; text-align: center; }
     </style>
 </head>
 <body>
@@ -20,96 +18,70 @@
 <div class="container">
     <h1>金融市場 相関チャート</h1>
     <div class="info">
-        ※左軸：為替レート / 右軸：金利(%)<br>
-        ※グラフはデータの範囲に合わせて自動ズームされます。凡例をクリックすると特定の線を消せます。
+        凡例（下の文字）にマウスを乗せると、そのラインが太くなります
     </div>
-    <div id="chart">データを読み込み中...</div>
-    <div class="status" id="last-update"></div>
+    <div id="chart"></div>
 </div>
 
 <script>
-    // --- 1. Supabase設定 (ご自身のものに書き換えてください) ---
-    const SUPABASE_URL = "https://bpejbrkehykbsvclcrqp.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_Y6wSssmiHZi04nrQsMnLEA_I8v3qkOK";
+    // --- Supabase設定 ---
+    const SUPABASE_URL = "https://bpejbrkehykbsvclcrqp.supabase.co"; 
+    const SUPABASE_KEY = "sb_publishable_Y6wSssmiHZi04nrQsMnLEA_I8v3qkOK"; 
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    async function fetchData() {
-        // 直近1000件のデータを取得
+    async function drawChart() {
         const { data, error } = await _supabase
             .from('market_data')
             .select('label, value, created_at')
             .order('created_at', { ascending: true })
-            .limit(1000); 
+            .limit(2000);
 
-        if (error) {
-            document.getElementById('chart').innerText = "エラー: " + error.message;
-            return;
-        }
+        if (error) return;
 
         const traces = {};
-        // 取得したデータをラベルごとに整理
         data.forEach(row => {
             if (!traces[row.label]) {
                 traces[row.label] = {
-                    x: [], y: [], 
-                    name: row.label, 
-                    type: 'scatter', 
-                    mode: 'lines',
-                    line: { width: 2.5 }
+                    x: [], y: [], name: row.label, type: 'scatter', mode: 'lines',
+                    line: { width: 2, color: null } // 初期設定の太さ
                 };
             }
             traces[row.label].x.push(new Date(row.created_at));
             traces[row.label].y.push(row.value);
         });
 
-        // --- 2. 軸の振り分け設定 ---
-        // 金利系のデータは「右軸（y2）」を使用するように指定
-        const rateLabels = ['US10Y', 'JP10Y', 'EU10Y', 'US_RATE', 'JP_RATE', 'EU_RATE'];
-        rateLabels.forEach(label => {
-            if (traces[label]) traces[label].yaxis = 'y2';
-        });
+        const rateLabels = ['US10Y', 'JP10Y', 'EU10Y', 'US_RATE', 'JP_RATE'];
+        rateLabels.forEach(l => { if (traces[l]) traces[l].yaxis = 'y2'; });
 
-        // --- 3. グラフのレイアウト（自動ズーム設定） ---
+        const plotData = Object.values(traces);
         const layout = {
-            hovermode: 'x unified', // マウスを乗せた時に全データを一括表示
-            xaxis: { 
-                title: '時刻', 
-                gridcolor: '#f0f0f0',
-                type: 'date'
-            },
-            yaxis: { 
-                title: '為替レート', 
-                gridcolor: '#f0f0f0',
-                autorange: true,   // データに合わせて自動で拡大
-                fixedrange: false  // 手動ズームを許可
-            },
-            yaxis2: { 
-                title: '金利 (%)', 
-                overlaying: 'y', 
-                side: 'right', 
-                showgrid: false,
-                autorange: true,   // データに合わせて自動で拡大
-                fixedrange: false
-            },
-            legend: { 
-                orientation: 'h', 
-                y: -0.15, 
-                x: 0.5, 
-                xanchor: 'center' 
-            },
-            margin: { t: 20, b: 100, l: 60, r: 60 }
+            hovermode: 'closest',
+            xaxis: { type: 'date' },
+            yaxis: { title: '為替レート', autorange: true, fixedrange: false },
+            yaxis2: { title: '金利 (%)', overlaying: 'y', side: 'right', autorange: true, fixedrange: false },
+            legend: { orientation: 'h', y: -0.2 },
+            margin: { t: 50, b: 100, l: 60, r: 60 }
         };
 
-        const config = { responsive: true };
+        const chartDiv = document.getElementById('chart');
+        Plotly.newPlot(chartDiv, plotData, layout);
 
-        Plotly.newPlot('chart', Object.values(traces), layout, config);
-        document.getElementById('last-update').innerText = "最終更新: " + new Date().toLocaleString();
+        // --- ホバー強調イベント ---
+        chartDiv.on('plotly_legendhover', function(data) {
+            const update = { 'line.width': plotData.map((_, i) => i === data.curveNumber ? 6 : 1.5) };
+            const opacity = { 'opacity': plotData.map((_, i) => i === data.curveNumber ? 1 : 0.3) };
+            Plotly.restyle(chartDiv, { ...update, ...opacity });
+        });
+
+        // --- ホバー解除で元に戻す ---
+        chartDiv.on('plotly_legendunhover', function(data) {
+            const update = { 'line.width': 2, 'opacity': 1 };
+            Plotly.restyle(chartDiv, update);
+        });
     }
 
-    // 初回読み込み
-    fetchData();
-    // 5分ごとに自動リフレッシュ
-    setInterval(fetchData, 300000);
+    drawChart();
+    setInterval(drawChart, 300000);
 </script>
 </body>
 </html>
