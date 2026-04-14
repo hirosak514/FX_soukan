@@ -116,21 +116,23 @@
         });
     }
 
-    function changePeriod(years, element) {
+   function changePeriod(years, element) {
         document.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
         if(element) element.classList.add('active');
 
         const now = new Date();
         const startDate = new Date();
         startDate.setFullYear(now.getFullYear() - years);
-        const startStr = startDate.toISOString().split('T')[0];
-        const endStr = now.toISOString().split('T')[0];
+
+        // --- 修正ポイント：比較用の日付を数値（タイムスタンプ）に変換 ---
+        const startTime = startDate.getTime();
+        const endTime = now.getTime();
 
         const chartDiv = document.getElementById('chart');
         
-        // 軸の範囲(range)と自動ズーム(autorange)を同時に更新
+        // 軸の範囲を更新
         Plotly.relayout(chartDiv, {
-            'xaxis.range': [startStr, endStr],
+            'xaxis.range': [startDate.toISOString().split('T')[0], now.toISOString().split('T')[0]],
             'yaxis.autorange': true,
             'yaxis2.autorange': true
         });
