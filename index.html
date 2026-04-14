@@ -2,94 +2,141 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>金融市場 相関ダッシュボード</title>
+    <title>金融市場 長期相関分析（日足）</title>
     <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
-        h1 { text-align: center; color: #1a1a1a; margin-bottom: 20px; }
-        #chart { width: 100%; height: 650px; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; }
+        .container { max-width: 1300px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1a1a1a; margin-bottom: 25px; font-size: 22px; }
+        .btn-group { text-align: center; margin-bottom: 20px; }
+        button { 
+            padding: 10px 24px; margin: 0 8px; cursor: pointer; border: 1px solid #ddd; 
+            background: white; border-radius: 25px; transition: 0.3s; font-weight: bold; color: #555;
+        }
+        button:hover { background: #f0f0f0; }
+        button.active { background: #1a73e8; color: white; border-color: #1a73e8; }
+        #chart { width: 100%; height: 700px; }
+        .loading { text-align: center; padding: 100px; color: #666; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>金融市場 相関チャート</h1>
-    <div id="chart"></div>
+    <h1>金融市場 長期相関分析（日足）</h1>
+    <div class="btn-group" id="period-btns">
+        <button onclick="changePeriod(1, this)">過去1年</button>
+        <button onclick="changePeriod(3, this)">過去3年</button>
+        <button onclick="changePeriod(5, this)">過去5年</button>
+        <button onclick="changePeriod(10, this)" class="active">過去10年</button>
+    </div>
+    <div id="chart"><div class="loading">データを取得中...</div></div>
 </div>
 
 <script>
-    const SUPABASE_URL = "https://bpejbrkehykbsvclcrqp.supabase.co"; 
-    const SUPABASE_KEY = "sb_publishable_Y6wSssmiHZi04nrQsMnLEA_I8v3qkOK"; 
+    // --- 1. Supabase設定 (ご自身の値に書き換えてください) ---
+    const SUPABASE_URL = "https://bpejbrkehykbsvclcrqp.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_Y6wSssmiHZi04nrQsMnLEA_I8v3qkOK;
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    async function drawChart() {
+    let allTraces = [];
+
+    async function initChart() {
         const { data, error } = await _supabase
             .from('market_data')
             .select('label, value, created_at')
-            .order('created_at', { ascending: true })
-            .limit(2000);
+            .order('created_at', { ascending: true });
 
-        if (error || !data) return;
+        if (error) {
+            document.getElementById('chart').innerText = "エラー: " + error.message;
+            return;
+        }
+
+        if (!data || data.length === 0) {
+            document.getElementById('chart').innerText = "データが見つかりません。Pythonで過去データをアップロードしてください。";
+            return;
+        }
 
         const tracesMap = {};
         data.forEach(row => {
             if (!tracesMap[row.label]) {
                 tracesMap[row.label] = {
                     x: [], y: [], name: row.label, type: 'scatter', mode: 'lines',
-                    line: { width: 2.5 } // 少し線を太くして存在感を出しました
+                    line: { width: 1.8 }
                 };
             }
-            tracesMap[row.label].x.push(new Date(row.created_at));
+            tracesMap[row.label].x.push(row.created_at);
             tracesMap[row.label].y.push(row.value);
         });
 
+        // 金利指標を右軸(y2)に割り当て
         const rateLabels = ['US10Y', 'JP10Y', 'EU10Y', 'US_RATE', 'JP_RATE'];
         Object.values(tracesMap).forEach(t => {
             if (rateLabels.includes(t.name)) t.yaxis = 'y2';
         });
 
-        const plotData = Object.values(tracesMap);
+        allTraces = Object.values(tracesMap);
+        
+        // 初回表示（10年）
+        const defaultBtn = document.querySelector('button.active');
+        changePeriod(10, defaultBtn);
+    }
+
+    function changePeriod(years, element) {
+        // ボタンのスタイル更新
+        document.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+        if(element) element.classList.add('active');
+
+        // 現在（今日）を基準に開始日を計算
+        const now = new Date();
+        const startDate = new Date();
+        startDate.setFullYear(now.getFullYear() - years);
 
         const layout = {
             hovermode: 'x unified',
-            xaxis: { type: 'date' },
+            xaxis: { 
+                type: 'date', 
+                range: [startDate.toISOString().split('T')[0], now.toISOString().split('T')[0]], 
+                gridcolor: '#eee',
+                title: '期間'
+            },
             yaxis: { 
                 title: '為替レート', 
                 autorange: true, 
-                // type: 'log', // 対数にする場合はここを有効化（ただし為替には不向きな場合も）
-                fixedrange: false 
+                fixedrange: false,
+                gridcolor: '#eee'
             },
             yaxis2: { 
                 title: '金利 (%)', 
                 overlaying: 'y', 
                 side: 'right', 
                 autorange: true, 
-                fixedrange: false 
+                fixedrange: false,
+                showgrid: false
             },
-            legend: { orientation: 'h', y: -0.15 },
-            margin: { t: 30, b: 100, l: 60, r: 60 }
+            legend: { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center' },
+            margin: { t: 20, b: 100, l: 60, r: 60 },
+            plot_bgcolor: '#fff',
+            paper_bgcolor: '#fff'
         };
 
         const chartDiv = document.getElementById('chart');
-        Plotly.newPlot(chartDiv, plotData, layout, {responsive: true});
+        Plotly.newPlot(chartDiv, allTraces, layout, {responsive: true});
 
-        // --- 強調表示（ホバーイベント） ---
+        // 凡例ホバー強調機能
         chartDiv.on('plotly_legendhover', function(ev) {
             Plotly.restyle(chartDiv, {
-                'line.width': plotData.map((_, i) => i === ev.curveNumber ? 6 : 1),
-                'opacity': plotData.map((_, i) => i === ev.curveNumber ? 1 : 0.15)
+                'line.width': allTraces.map((_, i) => i === ev.curveNumber ? 5 : 1),
+                'opacity': allTraces.map((_, i) => i === ev.curveNumber ? 1 : 0.15)
             });
         });
 
         chartDiv.on('plotly_legendunhover', () => {
-            Plotly.restyle(chartDiv, { 'line.width': 2.5, 'opacity': 1 });
+            Plotly.restyle(chartDiv, { 'line.width': 1.8, 'opacity': 1 });
         });
     }
 
-    drawChart();
-    setInterval(drawChart, 300000);
+    initChart();
 </script>
 </body>
 </html>
