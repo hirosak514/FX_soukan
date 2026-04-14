@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
@@ -13,6 +13,7 @@
         button { 
             padding: 10px 24px; margin: 0 8px; cursor: pointer; border: 1px solid #ddd; 
             background: white; border-radius: 25px; transition: 0.3s; font-weight: bold; color: #555;
+            outline: none;
         }
         button:hover { background: #f0f0f0; }
         button.active { background: #1a73e8; color: white; border-color: #1a73e8; }
@@ -53,7 +54,7 @@
         }
 
         if (!data || data.length === 0) {
-            document.getElementById('chart').innerText = "データが見つかりません。Pythonで過去データをアップロードしてください。";
+            document.getElementById('chart').innerHTML = "<div class='loading'>データが空です。Pythonで過去データを投入してください。</div>";
             return;
         }
 
@@ -62,14 +63,14 @@
             if (!tracesMap[row.label]) {
                 tracesMap[row.label] = {
                     x: [], y: [], name: row.label, type: 'scatter', mode: 'lines',
-                    line: { width: 1.8 }
+                    line: { width: 1.8 },
+                    connectgaps: true
                 };
             }
             tracesMap[row.label].x.push(row.created_at);
             tracesMap[row.label].y.push(row.value);
         });
 
-        // 金利指標を右軸(y2)に割り当て
         const rateLabels = ['US10Y', 'JP10Y', 'EU10Y', 'US_RATE', 'JP_RATE'];
         Object.values(tracesMap).forEach(t => {
             if (rateLabels.includes(t.name)) t.yaxis = 'y2';
@@ -77,43 +78,23 @@
 
         allTraces = Object.values(tracesMap);
         
-        // 初回表示（10年）
+        // 初回描画
         const defaultBtn = document.querySelector('button.active');
-        changePeriod(10, defaultBtn);
+        renderInitialChart(10, defaultBtn);
     }
 
-    function changePeriod(years, element) {
-        // ボタンのスタイル更新
-        document.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
-        if(element) element.classList.add('active');
-
-        // 現在（今日）を基準に開始日を計算
+    function renderInitialChart(years, element) {
         const now = new Date();
         const startDate = new Date();
         startDate.setFullYear(now.getFullYear() - years);
+        const startStr = startDate.toISOString().split('T')[0];
+        const endStr = now.toISOString().split('T')[0];
 
         const layout = {
             hovermode: 'x unified',
-            xaxis: { 
-                type: 'date', 
-                range: [startDate.toISOString().split('T')[0], now.toISOString().split('T')[0]], 
-                gridcolor: '#eee',
-                title: '期間'
-            },
-            yaxis: { 
-                title: '為替レート', 
-                autorange: true, 
-                fixedrange: false,
-                gridcolor: '#eee'
-            },
-            yaxis2: { 
-                title: '金利 (%)', 
-                overlaying: 'y', 
-                side: 'right', 
-                autorange: true, 
-                fixedrange: false,
-                showgrid: false
-            },
+            xaxis: { type: 'date', range: [startStr, endStr], gridcolor: '#eee' },
+            yaxis: { title: '為替レート', autorange: true, fixedrange: false, gridcolor: '#eee' },
+            yaxis2: { title: '金利 (%)', overlaying: 'y', side: 'right', autorange: true, fixedrange: false, showgrid: false },
             legend: { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center' },
             margin: { t: 20, b: 100, l: 60, r: 60 },
             plot_bgcolor: '#fff',
@@ -123,16 +104,35 @@
         const chartDiv = document.getElementById('chart');
         Plotly.newPlot(chartDiv, allTraces, layout, {responsive: true});
 
-        // 凡例ホバー強調機能
+        // ホバーイベント登録
         chartDiv.on('plotly_legendhover', function(ev) {
             Plotly.restyle(chartDiv, {
                 'line.width': allTraces.map((_, i) => i === ev.curveNumber ? 5 : 1),
                 'opacity': allTraces.map((_, i) => i === ev.curveNumber ? 1 : 0.15)
             });
         });
-
         chartDiv.on('plotly_legendunhover', () => {
             Plotly.restyle(chartDiv, { 'line.width': 1.8, 'opacity': 1 });
+        });
+    }
+
+    function changePeriod(years, element) {
+        document.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
+        if(element) element.classList.add('active');
+
+        const now = new Date();
+        const startDate = new Date();
+        startDate.setFullYear(now.getFullYear() - years);
+        const startStr = startDate.toISOString().split('T')[0];
+        const endStr = now.toISOString().split('T')[0];
+
+        const chartDiv = document.getElementById('chart');
+        
+        // 軸の範囲(range)と自動ズーム(autorange)を同時に更新
+        Plotly.relayout(chartDiv, {
+            'xaxis.range': [startStr, endStr],
+            'yaxis.autorange': true,
+            'yaxis2.autorange': true
         });
     }
 
