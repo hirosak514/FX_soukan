@@ -20,7 +20,6 @@
 </div>
 
 <script>
-    // --- Supabase設定 ---
     const SUPABASE_URL = "https://bpejbrkehykbsvclcrqp.supabase.co"; 
     const SUPABASE_KEY = "sb_publishable_Y6wSssmiHZi04nrQsMnLEA_I8v3qkOK"; 
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -39,52 +38,53 @@
             if (!tracesMap[row.label]) {
                 tracesMap[row.label] = {
                     x: [], y: [], name: row.label, type: 'scatter', mode: 'lines',
-                    line: { width: 2 }
+                    line: { width: 2.5 } // 少し線を太くして存在感を出しました
                 };
             }
             tracesMap[row.label].x.push(new Date(row.created_at));
             tracesMap[row.label].y.push(row.value);
         });
 
-        // 右軸設定
         const rateLabels = ['US10Y', 'JP10Y', 'EU10Y', 'US_RATE', 'JP_RATE'];
         Object.values(tracesMap).forEach(t => {
             if (rateLabels.includes(t.name)) t.yaxis = 'y2';
         });
 
         const plotData = Object.values(tracesMap);
+
         const layout = {
-            hovermode: 'closest',
+            hovermode: 'x unified',
             xaxis: { type: 'date' },
-            yaxis: { title: '為替レート', autorange: true, fixedrange: false },
-            yaxis2: { title: '金利 (%)', overlaying: 'y', side: 'right', autorange: true, fixedrange: false },
+            yaxis: { 
+                title: '為替レート', 
+                autorange: true, 
+                // type: 'log', // 対数にする場合はここを有効化（ただし為替には不向きな場合も）
+                fixedrange: false 
+            },
+            yaxis2: { 
+                title: '金利 (%)', 
+                overlaying: 'y', 
+                side: 'right', 
+                autorange: true, 
+                fixedrange: false 
+            },
             legend: { orientation: 'h', y: -0.15 },
             margin: { t: 30, b: 100, l: 60, r: 60 }
         };
 
         const chartDiv = document.getElementById('chart');
-        
-        // グラフ描画
         Plotly.newPlot(chartDiv, plotData, layout, {responsive: true});
 
-        // --- ホバー強調処理の改善 ---
-        chartDiv.on('plotly_legendhover', function(eventData) {
-            const curveNumber = eventData.curveNumber;
-            const updateWidths = plotData.map((_, i) => i === curveNumber ? 5 : 1);
-            const updateOpacities = plotData.map((_, i) => i === curveNumber ? 1 : 0.2);
-            
+        // --- 強調表示（ホバーイベント） ---
+        chartDiv.on('plotly_legendhover', function(ev) {
             Plotly.restyle(chartDiv, {
-                'line.width': updateWidths,
-                'opacity': updateOpacities
+                'line.width': plotData.map((_, i) => i === ev.curveNumber ? 6 : 1),
+                'opacity': plotData.map((_, i) => i === ev.curveNumber ? 1 : 0.15)
             });
         });
 
-        // --- ホバー解除 ---
-        chartDiv.on('plotly_legendunhover', function() {
-            Plotly.restyle(chartDiv, {
-                'line.width': 2,
-                'opacity': 1
-            });
+        chartDiv.on('plotly_legendunhover', () => {
+            Plotly.restyle(chartDiv, { 'line.width': 2.5, 'opacity': 1 });
         });
     }
 
